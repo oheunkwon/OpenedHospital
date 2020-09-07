@@ -13,12 +13,12 @@ class Hospitaledithistories(models.Model):
     userid = models.ForeignKey('Users', models.DO_NOTHING, db_column='userId', blank=True, null=True)  # Field name made lowercase.
     hospitalid = models.ForeignKey('Hospitals', models.DO_NOTHING, db_column='hospitalId', blank=True, null=True)  # Field name made lowercase.
     status = models.CharField(max_length=255, blank=True, null=True)
-    createdat = models.DateTimeField(db_column='createdAt', blank=True, null=True)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', blank=True, null=True)  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', blank=True, auto_now_add=True)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', blank=True, auto_now=True, null=True)  # Field name made lowercase.
 
     class Meta:
         managed = False
-        db_table = 'HospitalEditHistories'
+        db_table = 'OP_HospitalEditHistories'
 
 
 class Hospitals(models.Model):
@@ -29,12 +29,12 @@ class Hospitals(models.Model):
     x = models.FloatField(blank=True, null=True)
     y = models.FloatField(blank=True, null=True)
     status = models.CharField(max_length=255, blank=True, null=True)
-    createdat = models.DateTimeField(db_column='createdAt', blank=True, null=True)  # Field name made lowercase.
-    updatedat = models.DateTimeField(db_column='updatedAt', blank=True, null=True)  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', blank=True, auto_now_add=True)  # Field name made lowercase.
+    updatedat = models.DateTimeField(db_column='updatedAt', blank=True, auto_now=True)  # Field name made lowercase.
 
     class Meta:
         managed = False
-        db_table = 'Hospitals'
+        db_table = 'OP_Hospitals'
 
 
 class Token(models.Model):
@@ -47,7 +47,7 @@ class Token(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'Tokens'
+        db_table = 'OP_Tokens'
 
 
 class Users(models.Model):
@@ -59,12 +59,12 @@ class Users(models.Model):
     address = models.CharField(max_length=255, blank=True, null=True)
     x = models.FloatField(blank=True, null=True)
     y = models.FloatField(blank=True, null=True)
-    createdat = models.DateTimeField(db_column='createdAt', blank=True, null=True)  # Field name made lowercase.
+    createdat = models.DateTimeField(db_column='createdAt', blank=True,auto_now_add=True)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', blank=True, null=True)  # Field name made lowercase.
 
     class Meta:
         managed = False
-        db_table = 'Users'
+        db_table = 'OP_Users'
 
 
 class AuthGroup(models.Model):

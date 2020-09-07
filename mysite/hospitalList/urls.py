@@ -3,5 +3,5 @@ from . import views
 
 app_name = 'hospitalList'
 urlpatterns = [
-	path('',views.ListView.as_view(),name='index'),
+	#path('',views.ListView.as_view(),name='index'),
 ]

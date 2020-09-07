@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'hospitalList.apps.HospitallistConfig',
     'rest_framework',
     'signUp.apps.SignupConfig',
+    'login',
 
 ]
 

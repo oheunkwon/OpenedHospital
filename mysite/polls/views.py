@@ -104,7 +104,7 @@ class UsersViewSet(viewsets.ModelViewSet):
                 #Token.objects.create(token=token)
                 servertoken = Token.objects.get(token=token)
                 #mail전송 - 토큰 정보 담음
-                data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": {"email": "5agrvd@gmail.com"},"subject": "비밀번호 재설정 이메일입니다. ","content": [{"type": "text/plain", "value": "'
+                data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": {"email": "5agrvd@gmail.com"},"subject": "reset password ","content": [{"type": "text/plain", "value": "'
                 data2 = token +'   :password/reset/logininfo token sent  " }]}'
                 data = data1 + data2
                 requests.post(urlparse('https://api.sendgrid.com/v3/mail/send').geturl(), headers=headers, data=data)

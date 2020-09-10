@@ -3,6 +3,8 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Hospitals
 import json
+
+
 from django.core.serializers import serialize
 # Create your views here.
 class ListView(View):

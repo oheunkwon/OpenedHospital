@@ -23,17 +23,22 @@ import polls
 
 router = routers.DefaultRouter()
 #router.register(r'Users',views.UsersViewSet)
-
-router.register(r'users',views.UsersViewSet)
-router.register(r'hospitals',views.HospitalViewSet)
-router.register(r'hospital',views.HEViewSet)
-router.register(r'token',views.TokenViewSet)
+version = 'v1'
+router.register(r'{}/users'.format(version),views.UsersViewSet)
+router.register(r'{}/hospitals'.format(version),views.HospitalViewSet)
+router.register(r'{}/hospital'.format(version),views.HEViewSet)
+router.register(r'{}/token'.format(version),views.TokenViewSet)
 
 urlpatterns = [
+
                path('', include(router.urls)),
+
+                #path('v1/users/', SignupView.as_view(),name='signup'),
+               #path('v1/users/login', include(''))
                path('api-auth/',include('rest_framework.urls',namespace='rest_framework')),
-               path('hospitalList/',include('hospitalList.urls')),
-               path('login/', include('login.urls')),
+               #path('v1/users/',include('hospitalList.urls')),
+               #path('login/', include('login.urls')),
+
                path('admin/', admin.site.urls),
-               #path('polls/', include('polls.urls'))
+
                ]

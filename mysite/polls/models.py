@@ -18,7 +18,7 @@ class Hospitaledithistories(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'OP_HospitalEditHistories'
+        db_table = 'HospitalEditHistories'
 
 
 class Hospitals(models.Model):
@@ -34,7 +34,7 @@ class Hospitals(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'OP_Hospitals'
+        db_table = 'Hospitals'
 
 
 class Token(models.Model):
@@ -47,7 +47,7 @@ class Token(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'OP_Tokens'
+        db_table = 'Tokens'
 
 
 class Users(models.Model):
@@ -64,7 +64,7 @@ class Users(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'OP_Users'
+        db_table = 'Users'
 
 
 class AuthGroup(models.Model):

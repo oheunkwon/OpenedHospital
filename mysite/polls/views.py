@@ -1,3 +1,17 @@
+"""
+열린병원 API 구현.
+UsersViewSet 클래스
+-login
+-signup
+-password
+-password_reset
+
+HospitalViewSet 클래스
+-register_hospital
+-excel
+-nearby_hospital
+-hospital_id
+"""
 import re
 from urllib.parse import urlparse
 from django.http import HttpResponse, JsonResponse
@@ -5,6 +19,7 @@ from django.http import HttpResponse, JsonResponse
 from rest_framework import viewsets, permissions, status
 import jwt
 import bcrypt
+import uuid
 from openpyxl import Workbook
 import pymysql
 import requests
@@ -36,9 +51,7 @@ TEL_RGX = '^(^0[0-9]{1,2})(-)?([0-9]{3,4})(-)?([0-9]{4})$'
 STATUS_RGX = '^(OPEN|CLOSED)$'
 APP_KEY = ''
 URL = 'https://dapi.kakao.com/v2/local/search/address.json?query='
-"""
-열린병원 API 구현.
-"""
+
 
 
 class UsersViewSet(viewsets.ModelViewSet):
@@ -64,7 +77,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         if email and pwd:
             db_email = Users.objects.get(email=email)  # db에 저장되어있는 값 -db에서5agrvd@gmail.com
             if bcrypt.checkpw(pwd.encode('UTF-8'), db_email.pwd.encode('UTF-8')):
-                return Response("202 Accepted", status=status.HTTP_202_ACCEPTED)
+                return JsonResponse({"result":{"location":"users/:uid"},"success":True,"error":[],"message":'accepted'}, status=202)
             return Response(ERR_CODE_4010, status=status.HTTP_401_UNAUTHORIZED)
         return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
 
@@ -99,9 +112,10 @@ class UsersViewSet(viewsets.ModelViewSet):
         json_obj = result.json()
         coord_x = json_obj['documents'][0]['x']
         coord_y = json_obj['documents'][0]['y']
-        db_email = Users.objects.filter(email=email)
-        if valid_email and valid_pwd and valid_name and valid_address:
-            if name and email and address and pwd:
+
+        if name and email and address and pwd:
+            db_email = Users.objects.filter(email=email)
+            if valid_email and valid_pwd and valid_name and valid_address:
                 if db_email:
                     return Response(ERR_CODE_4002, status=status.HTTP_400_BAD_REQUEST)
                 else:
@@ -109,12 +123,13 @@ class UsersViewSet(viewsets.ModelViewSet):
                                          pwd=bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8"),
                                          name=name,
                                          address=address, x=coord_x, y=coord_y)
-                    db_email = Users.objects.get(email=email)
-                    token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
-                    Token.objects.create(token=token)
-                    return Response("201 created", status=status.HTTP_201_CREATED)
+                    #db_email = Users.objects.get(email=email)
+                    #token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
+                    #Token.objects.create(token=token)
+                    return JsonResponse({"result":{"location":"users/:uid"},"success":True,"error":None,"message":'created'}, status=201)
             return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
         return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
+    #return JsonResponse({"result":{"location":"users/:uid"},"success":issuccess,"error":error,"message":message}, status=statuscode)
 
     @action(methods=['GET'], detail=False, url_path='password/find')
     def password(self, request):  # 비밀번호 재설정, 비밀번호 찾기
@@ -138,9 +153,12 @@ class UsersViewSet(viewsets.ModelViewSet):
             data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": ''{"email": ''"5agrvd@gmail.com"},"subject": "reset password ","content": ''[{"type": "text/plain", ''"value": " '
             data2 = '   :password/reset/login info token sent  " }]}'
             data = data1 + data2
+            reset_url = 'http://127.0.0.1:8000/v1/password/reset/'
             requests.post(urlparse('https://api.sendgrid.com/v3/mail/send').geturl(), headers=headers, data=data)
             # return JsonResponse({"비밀번호 재설정 링크 이메일 전송 완료.....": token})
-            return Response("200 OK", status=status.HTTP_200_OK)
+            return JsonResponse({"result": {"token": token,"resetUrl":reset_url,
+                                            }, "success": 'true', "errors": [], "messages": []}, status=200)
+
         return Response(ERR_CODE_4012, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(methods=['PUT'], detail=False, url_path='password/reset')
@@ -154,12 +172,13 @@ class UsersViewSet(viewsets.ModelViewSet):
         token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
         server_token = Token.objects.get(token=token)
         regex_pwd = re.compile(PWD_RGX)  # pwd validation
-        new_pwd = regex_pwd.match(pwd)
+        valid_pwd = regex_pwd.match(pwd)
         if server_token:
-            if new_pwd:
+            if valid_pwd:
                 db_email.pwd = bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8")
                 db_email.save()
-                return Response("202 pwd재설정 완료...! Accepted", status=status.HTTP_202_ACCEPTED)
+                return JsonResponse({"result": {"location": "/users/:uid",
+                                                }, "success": 'true', "errors": [], "messages": 'accepted'}, status=202)
             return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
         return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
 
@@ -210,8 +229,8 @@ class HospitalViewSet(viewsets.ModelViewSet):
             return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
         return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(methods=['POST'], detail=False)
-    def excel(self):
+    @action(methods=['GET'], detail=False)
+    def excel(self,request):
         """
         131. 전체 리스트 다운로드
         """
@@ -226,7 +245,6 @@ class HospitalViewSet(viewsets.ModelViewSet):
                 work_state.append(('id', 'name', 'tel', 'address', 'x', 'y', 'status', 'createdAt', 'updatedAt'))
                 for row in result:
                     work_state.append(row)
-
                 work_book.save('/Users/kwon-oh-eun/Documents/py3django/hospitalList.xlsx')
         finally:
             conn.close()
@@ -288,7 +306,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
                 return JsonResponse(
                     {"result": {"location": "/hospitals/:hospitalId"}, "success": 'true', "errors": [], "messages": []},
                     status=200)
-            return Response(ERR_CODE_4005, status=status.HTTP_400_BAD_REQUEST)
+            #return Response(ERR_CODE_4005, status=status.HTTP_400_BAD_REQUEST)
         return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
 
     def create(self, request, *args, **kwargs):

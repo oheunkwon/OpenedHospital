@@ -9,7 +9,7 @@ class UsersSerializer(serializers.HyperlinkedModelSerializer):
 class HospitalsSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta: 
 		model = Hospitals
-		fields=['url','id','name','tel','address','status','x','y']
+		fields=['url','id','name','tel','address','status','x','y','uid']
 		
 class HESerializer(serializers.HyperlinkedModelSerializer):
 	class Meta: 

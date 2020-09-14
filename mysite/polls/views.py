@@ -30,19 +30,23 @@ from .serializers import UsersSerializer, HospitalsSerializer, HESerializer, Tok
 from .models import Users, Hospitals, Hospitaledithistories, Token
 # from django.core.mail import send_mail
 # import json
-ERR_CODE_4000 = "잘못된 요청입니다.{fieldname}"
-ERR_CODE_4002 = "{email}은(는) 이미 가입된 이메일 입니다."
-ERR_CODE_4003 = "주소가 잘못되었거나 존재하지 않습니다."
-ERR_CODE_4004 = "{field_name}을 입력해주세요."
-ERR_CODE_4005 = "{hospitals.name}은 이미 {status} 된 병원입니다."
-ERR_CODE_4010 = "로그인 정보가 일치하지 않습니다."
-ERR_CODE_4011 = "존재하지 않는 이메일 입니다."
-ERR_CODE_4012 = "만료되었습니다 ."
-ERR_CODE_4030 = "권한이 없습니다."
-ERR_CODE_4040 = "존재하지 않는 리소스 입니다."
-ERR_CODE_4041 = "존재하지 않는 {hospital_id} 입니다."
-ERR_CODE_5000 = "요청을 처리할 수 없습니다."
-
+status_code = {
+            '200': 'OK',
+            '201': 'CREATED',
+            '202': 'ACCEPTED',
+            '4000': '잘못된 요청입니다.{}형식이 맞지 않습니다.',
+            '4002': '{}은(는) 이미 가입된 이메일 입니다.',
+            '4003': '주소가 잘못되었거나 존재하지 않습니다.',
+            '4004': '{}을 입력해주세요.',
+            '4005': '{}은 이미 {} 된 병원입니다.',
+            '4010': '로그인 정보가 일치하지 않습니다.',
+            '4011': '존재하지 않는 이메일 입니다.',
+            '4012': '만료되었습니다 .',
+            '4030': '권한이 없습니다.',
+            '4040': '존재하지 않는 리소스 입니다.',
+            '4041': '존재하지 않는 host id 입니다.',
+            '5000': '요청을 처리할 수 없습니다.'}
+UID_RGX = '^[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}$'
 EMAIL_RGX = '^[\w\-]+@(?:(?:[\w\-]{2,}\.)+[a-zA-Z]{2,})$'
 PWD_RGX = '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[$@$!#%*?&])[A-Za-z\d$@$!%*?#&_\-~]{6,100}'
 NAME_RGX = '^([ㄱ-ㅎㅏ-ㅣ가-힣]\s{0,}){1,100}|([a-zA-Z]\s{0,}){1,100}$'
@@ -51,7 +55,6 @@ TEL_RGX = '^(^0[0-9]{1,2})(-)?([0-9]{3,4})(-)?([0-9]{4})$'
 STATUS_RGX = '^(OPEN|CLOSED)$'
 APP_KEY = ''
 URL = 'https://dapi.kakao.com/v2/local/search/address.json?query='
-
 
 
 class UsersViewSet(viewsets.ModelViewSet):
@@ -75,11 +78,24 @@ class UsersViewSet(viewsets.ModelViewSet):
         email = request.POST.get('email', False)  # postman에서 입력한 값 5agrvd@gmail.com
         pwd = request.POST.get('pwd', False)  # 11111
         if email and pwd:
-            db_email = Users.objects.get(email=email)  # db에 저장되어있는 값 -db에서5agrvd@gmail.com
-            if bcrypt.checkpw(pwd.encode('UTF-8'), db_email.pwd.encode('UTF-8')):
-                return JsonResponse({"result":{"location":"users/:uid"},"success":True,"error":[],"message":'accepted'}, status=202)
-            return Response(ERR_CODE_4010, status=status.HTTP_401_UNAUTHORIZED)
-        return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                db_email = Users.objects.get(email=email)
+                uid = db_email.uid  # db에 저장되어있는 값 -db에서5agrvd@gmail.com/uid
+                if bcrypt.checkpw(pwd.encode('UTF-8'), db_email.pwd.encode('UTF-8')):
+                    return JsonResponse({"result":{"location": "users/:"+uid},
+                                         "success": True, "error": None,
+                                         "message": status_code['202']}, status=202)
+                return JsonResponse({"result": {"location": "users/:"+uid},
+                                     "success": False, "error": '4010',
+                                     "message": status_code['4010']}, status=401)
+            finally:
+                return JsonResponse({"result": {"location": "users/login/"},
+                                     "success": False, "error": '5000',
+                                     "message": status_code['5000']}, status=500)
+
+        return JsonResponse({"result": {"location": "users/:"},
+                             "success": False, "error": '4004',
+                             "message": status_code['4004'].format("email, pwd")}, status=500)
 
     # v1/users/
     @action(methods=['POST'], detail=False)
@@ -112,24 +128,28 @@ class UsersViewSet(viewsets.ModelViewSet):
         json_obj = result.json()
         coord_x = json_obj['documents'][0]['x']
         coord_y = json_obj['documents'][0]['y']
-
+        uid = str(uuid.uuid4())
         if name and email and address and pwd:
             db_email = Users.objects.filter(email=email)
             if valid_email and valid_pwd and valid_name and valid_address:
                 if db_email:
-                    return Response(ERR_CODE_4002, status=status.HTTP_400_BAD_REQUEST)
+                    return JsonResponse({"result": {"location": "users/:"+uid},
+                                        "success": False, "error": '4002',
+                                         "message": status_code['4002'].format("email")}, status=400)
                 else:
-                    Users.objects.create(email=email,
+                    Users.objects.create(uid=uid, email=email,
                                          pwd=bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8"),
                                          name=name,
                                          address=address, x=coord_x, y=coord_y)
-                    #db_email = Users.objects.get(email=email)
-                    #token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
-                    #Token.objects.create(token=token)
-                    return JsonResponse({"result":{"location":"users/:uid"},"success":True,"error":None,"message":'created'}, status=201)
-            return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
-        return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
-    #return JsonResponse({"result":{"location":"users/:uid"},"success":issuccess,"error":error,"message":message}, status=statuscode)
+                    return JsonResponse({"result": {"location": "users/:"+uid},
+                                         "success": True,"error": None,
+                                         "message": status_code['201']}, status=201)
+            return JsonResponse({"result": {"location": "users/:"+uid},
+                                "success": False, "error": '4000',
+                                 "message": status_code['4000']}, status=400)
+        return JsonResponse({"result": {"location": "users/:"+uid},
+                            "success": False, "error": '4004',
+                             "message": status_code['4004']}, status=400)
 
     @action(methods=['GET'], detail=False, url_path='password/find')
     def password(self, request):  # 비밀번호 재설정, 비밀번호 찾기
@@ -150,16 +170,18 @@ class UsersViewSet(viewsets.ModelViewSet):
             token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
             Token.objects.get(token=token)
             # mail전송 - 토큰 정보 담음
-            data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": ''{"email": ''"5agrvd@gmail.com"},"subject": "reset password ","content": ''[{"type": "text/plain", ''"value": " '
-            data2 = '   :password/reset/login info token sent  " }]}'
-            data = data1 + data2
             reset_url = 'http://127.0.0.1:8000/v1/password/reset/'
+            data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": ''{"email": ''"5agrvd@gmail.com"},"subject": "reset password ","content": ''[{"type": "text/plain", ''"value": " '
+            data2 = reset_url+'   :password/reset/login info token sent  " }]}'
+            data = data1 + data2
             requests.post(urlparse('https://api.sendgrid.com/v3/mail/send').geturl(), headers=headers, data=data)
             # return JsonResponse({"비밀번호 재설정 링크 이메일 전송 완료.....": token})
-            return JsonResponse({"result": {"token": token,"resetUrl":reset_url,
-                                            }, "success": 'true', "errors": [], "messages": []}, status=200)
-
-        return Response(ERR_CODE_4012, status=status.HTTP_401_UNAUTHORIZED)
+            return JsonResponse({"result": {"token": str(token), "resetUrl": reset_url},
+                                 "success": True, "error": [],
+                                 "messages": []}, status=200)
+        return JsonResponse({"result": {"token": [], "resetUrl": []},
+                            "success": False, "error": [],
+                             "messages": status_code['5000']}, status=500)
 
     @action(methods=['PUT'], detail=False, url_path='password/reset')
     def password_reset(self, request):  # 비밀번호 재설정, 비밀번호 찾기
@@ -169,6 +191,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         email = request.POST.get('email', False)  # postman에서 입력한 값 5agrvd@gmail.com
         pwd = request.POST.get('pwd', False)
         db_email = Users.objects.get(email=email)
+        uid = db_email.uid
         token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
         server_token = Token.objects.get(token=token)
         regex_pwd = re.compile(PWD_RGX)  # pwd validation
@@ -177,10 +200,15 @@ class UsersViewSet(viewsets.ModelViewSet):
             if valid_pwd:
                 db_email.pwd = bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8")
                 db_email.save()
-                return JsonResponse({"result": {"location": "/users/:uid",
-                                                }, "success": 'true', "errors": [], "messages": 'accepted'}, status=202)
-            return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
-        return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
+                return JsonResponse({"result": {"location": "/users/:"+uid, },
+                                     "success": True, "errors": [],
+                                     "messages": status_code['202']}, status=202)
+            return JsonResponse({"result": {"location": "/users/:"+uid, },
+                                "success": False, "errors": '4000',
+                                 "messages": status_code['4000']}, status=400)
+        return JsonResponse({"result": {"location": "/users/:"+uid, },
+                            "success": False, "errors": '4010',
+                             "messages": status_code['4010']}, status=401)
 
     def create(self, request, *args, **kwargs):
         if request.method == 'POST':
@@ -202,11 +230,15 @@ class HospitalViewSet(viewsets.ModelViewSet):
         tel = request.POST.get('tel', False)
         address = request.POST.get('address', False)
         op_status = request.POST.get('status', False)
-        if name and tel and address and op_status:
+        #uid = request.POST.get('uid',False)
+        uid = str(uuid.uuid4())
+        if name and tel and address and op_status :
+            regex_uid = re.compile(UID_RGX)
             regex_name = re.compile(NAME_RGX)  # name validation
             regex_tel = re.compile(TEL_RGX)  # tel validation
             regex_addr = re.compile(ADDR_RGX)  # address validation
             regex_status = re.compile(STATUS_RGX)  # status validation
+            valid_uid = regex_uid.match(uid)
             valid_name = regex_name.match(name)
             valid_tel = regex_tel.match(tel)
             valid_address = regex_addr.match(address)
@@ -219,15 +251,21 @@ class HospitalViewSet(viewsets.ModelViewSet):
             coord_x = json_obj['documents'][0]['x']
             coord_y = json_obj['documents'][0]['y']
 
-            if valid_name and valid_tel and valid_address and valid_status:
-                Hospitals.objects.create(name=name, tel=tel, address=address, status=op_status, x=coord_x, y=coord_y)
-                return JsonResponse(
-                    {"result": {"location": "/hospitals/:hospitalId"}, "success": 'true', "errors": [], "messages": []},
-                    status=201)
+            if valid_name and valid_tel and valid_address and valid_status and valid_uid:
+                Hospitals.objects.create(name=name, tel=tel, address=address, status=op_status, x=coord_x,
+                                         y=coord_y, uid=uid)
+                chk_data = Hospitals.objects.get(name=name)
+                hospital_id = chk_data.id
+                return JsonResponse({"result": {"location": "/hospitals/:"+str(hospital_id)},
+                                     "success": 'true', "errors": [],
+                                     "messages": status_code['201']}, status=201)
                 # return Response("Status 4004 : 다시 입력해 주세요.", status=status.HTTP_400_BAD_REQUEST)
-
-            return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
-        return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse({"result": {"location": "/users/:"+uid},
+                                "success": True, "errors": '4000',
+                                 "messages": status_code['4000'].format("name,tel,address,status")}, status=400)
+        return JsonResponse({"result": {"location": "/users/:"+uid},
+                            "success": True, "errors": '4004',
+                             "messages": status_code['4004'].format("name,tel,address,status")}, status=400)
 
     @action(methods=['GET'], detail=False)
     def excel(self,request):
@@ -256,19 +294,28 @@ class HospitalViewSet(viewsets.ModelViewSet):
     def nearby_hospital(self, request):  # 열린 병원 보기
         """
         121. 병원 검색
-        이름 검색하여 해당하는 병원 보기.
+        이름/tel/address/ 검색하여 해당하는 병원 보기.
         """
-        name = request.POST.get('name', False)  # postman에서 입력한 값
-
-        if name:  # and tel and address and opstatus:
+         # postman에서 입력한 값
+        name = request.POST.get('name', False)
+        tel = request.POST.get('tel', False)
+        address = request.POST.get('address', False)
+        op_status = request.POST.get('status', False)
+        if name:#or tel or address or op_status:  # tel and address and opstatus:
             # data = Hospitals.objects.create(name=name, tel=tel, address=address, status=opstatus)
+            #hospitals = Hospitals.objects.filter(name=name)
             data = Hospitals.objects.get(name=name)
             tel = data.tel
             address = data.address
             op_status = data.status
-            return JsonResponse({'name': name, 'tel': tel, 'address': address, 'status': op_status}, status=202)
 
-        return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse({"result": {"hospitals":'[]',
+                                 "name": name, "tel": tel, "address": address,
+                                "status": op_status},
+                                 "success": True, "error": [],"message": status_code['202']},status=202)
+        return JsonResponse({"result": {"hospitals": '[]'},
+                             "success": False, "error": '40041',
+                             "message": status_code['4004'].format("name, tel, address, status")}, status=400)
 
     @action(methods=['GET', 'PUT'], detail=False, url_path='hospitalid')
     def hospital_id(self, request):  # 병원상세보기
@@ -277,11 +324,13 @@ class HospitalViewSet(viewsets.ModelViewSet):
         """
         if request.method == 'GET':
             name = request.POST.get('name', False)  # postman에서 입력한 값
+
             if name:
                 data = Hospitals.objects.get(name=name)
                 tel = data.tel
                 address = data.address
                 op_status = data.status
+                hospital_id = data.id
                 geocode = URL + address
                 result = requests.get(urlparse(geocode).geturl(),
                                       headers={"Authorization": "KakaoAK 230655e7cf44450d080665dc328e4dd2"})
@@ -289,25 +338,31 @@ class HospitalViewSet(viewsets.ModelViewSet):
                 coord_x = json_obj['documents'][0]['address']['x']
                 coord_y = json_obj['documents'][0]['address']['y']
                 # data.loads()
-                return JsonResponse({"result": {"location": "/hospitals/:hospitalid",
+                return JsonResponse({"result": {"location": "/hospitals/:"+hospital_id,
                                                 "name": name, "tel": tel, "address": address, "status": op_status,
                                                 "x": coord_x, "y": coord_y,
                                                 }, "success": 'true', "errors": [], "messages": []}, status=201)
 
-            return Response(ERR_CODE_4004, status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse({"result": {"hospitals": '[]'},
+                                 "success": False, "error": '4004',
+                                 "message": status_code['4004'].format("name, tel, address, status")}, status=400)
+
         else:  # 112.진료거부병원 정보 변경.
             name = request.POST.get('name', False)  # postman 에서 입력한 값 (변경할 병원)
             after_status = request.POST.get('status', False)
             hospital_obj = Hospitals.objects.get(name=name)
+            hospital_id = hospital_obj.id
             before_status = hospital_obj.status
             if name and after_status != before_status:
                 hospital_obj.status = after_status
                 hospital_obj.save()
                 return JsonResponse(
-                    {"result": {"location": "/hospitals/:hospitalId"}, "success": 'true', "errors": [], "messages": []},
+                    {"result": {"location": "/hospitals/:"+str(hospital_id)},
+                     "success": 'true', "errors": [], "messages": []},
                     status=200)
-            #return Response(ERR_CODE_4005, status=status.HTTP_400_BAD_REQUEST)
-        return Response(ERR_CODE_4000, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({"result": {"hospitals": '[]'},
+                             "success": False, "error": '4004',
+                             "message": status_code['4004'].format("status")}, status=400)
 
     def create(self, request, *args, **kwargs):
         if request.method == 'POST':
@@ -325,10 +380,12 @@ class HospitalViewSet(viewsets.ModelViewSet):
         return result
 
 
+
 class HEViewSet(viewsets.ModelViewSet):
     queryset = Hospitaledithistories.objects.all()
     serializer_class = HESerializer
     permission_classes = [permissions.IsAuthenticated]
+
 
 
 class TokenViewSet(viewsets.ModelViewSet):
@@ -336,4 +393,3 @@ class TokenViewSet(viewsets.ModelViewSet):
     serializer_class = TokenSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-# Create your views here.

@@ -31,6 +31,7 @@ class Hospitals(models.Model):
     status = models.CharField(max_length=255, blank=True, null=True)
     createdat = models.DateTimeField(db_column='createdAt', blank=True, auto_now_add=True)  # Field name made lowercase.
     updatedat = models.DateTimeField(db_column='updatedAt', blank=True, auto_now=True)  # Field name made lowercase.
+    uid = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False

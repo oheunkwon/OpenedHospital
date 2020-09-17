@@ -82,13 +82,14 @@ class UsersViewSet(viewsets.ModelViewSet):
                 db_email = Users.objects.get(email=email)
                 uid = db_email.uid  # db에 저장되어있는 값 -db에서5agrvd@gmail.com/uid
                 if bcrypt.checkpw(pwd.encode('UTF-8'), db_email.pwd.encode('UTF-8')):
-                    return JsonResponse({"result":{"location": "users/:"+uid},
+                    return JsonResponse({"result": {"location": "users/:"+uid},
                                          "success": True, "error": None,
                                          "message": status_code['202']}, status=202)
+
                 return JsonResponse({"result": {"location": "users/:"+uid},
                                      "success": False, "error": '4010',
                                      "message": status_code['4010']}, status=401)
-            finally:
+            except:
                 return JsonResponse({"result": {"location": "users/login/"},
                                      "success": False, "error": '5000',
                                      "message": status_code['5000']}, status=500)
@@ -141,8 +142,11 @@ class UsersViewSet(viewsets.ModelViewSet):
                                          pwd=bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8"),
                                          name=name,
                                          address=address, x=coord_x, y=coord_y)
+                    db_email = Users.objects.get(email=email)
+                    token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
+                    Token.objects.create(token=token)
                     return JsonResponse({"result": {"location": "users/:"+uid},
-                                         "success": True,"error": None,
+                                         "success": True, "error": None,
                                          "message": status_code['201']}, status=201)
             return JsonResponse({"result": {"location": "users/:"+uid},
                                 "success": False, "error": '4000',
@@ -159,29 +163,37 @@ class UsersViewSet(viewsets.ModelViewSet):
         -없으면 errcode 4012
         """
 
-        email = request.POST.get('email', False)  # postman에서 입력한 값 5agrvd@gmail.com
+        email = request.POST.get('email', False)  # postman 에서 입력한 값 5agrvd@gmail.com
         headers = {
             'Authorization': 'Bearer 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',
             'Content-Type': 'application/json',
         }
         # return JsonResponse({"비밀번호 재설정 링크 이메일 전송 완료.....": email})
-        db_email = Users.objects.get(email=email)  # db에 저장되어있는 값 -db에서5agrvd@gmail.com
+          # db에 저장되어있는 값 -db에서5agrvd@gmail.com
         if email:
-            token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
-            Token.objects.get(token=token)
-            # mail전송 - 토큰 정보 담음
-            reset_url = 'http://127.0.0.1:8000/v1/password/reset/'
-            data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": ''{"email": ''"5agrvd@gmail.com"},"subject": "reset password ","content": ''[{"type": "text/plain", ''"value": " '
-            data2 = reset_url+'   :password/reset/login info token sent  " }]}'
-            data = data1 + data2
-            requests.post(urlparse('https://api.sendgrid.com/v3/mail/send').geturl(), headers=headers, data=data)
-            # return JsonResponse({"비밀번호 재설정 링크 이메일 전송 완료.....": token})
-            return JsonResponse({"result": {"token": str(token), "resetUrl": reset_url},
-                                 "success": True, "error": [],
-                                 "messages": []}, status=200)
+            try:
+                db_email = Users.objects.get(email=email)
+            except:
+                return JsonResponse({"result": {"token": [], "resetUrl": []},
+                                     "success": False, "error": '4040',
+                                     "message": status_code['4040']}, status=400)
+            if db_email:
+                token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
+                Token.objects.get(token=token)
+                # mail전송 - 토큰 정보 담음
+                reset_url = str('http://127.0.0.1:8000/v1/password/reset/')
+                data1 = '{"personalizations": [{"to": [{"email": "5agrvd@gmail.com"}]}],"from": ''{"email": ''"5agrvd@gmail.com"},"subject": "reset password ","content": ''[{"type": "text/plain", ''"value": " '
+                data2 = reset_url+'   :password/reset/login info token sent  " }]}'
+                data = data1 + data2
+                requests.post(urlparse('https://api.sendgrid.com/v3/mail/send').geturl(), headers=headers, data=data)
+                # return JsonResponse({"비밀번호 재설정 링크 이메일 전송 완료.....": token})
+                return JsonResponse({"result": {"token": str(token), "resetUrl": reset_url},
+                                    "success": True, "error": [],
+                                     "message": status_code['200']}, status=200)
+
         return JsonResponse({"result": {"token": [], "resetUrl": []},
-                            "success": False, "error": [],
-                             "messages": status_code['5000']}, status=500)
+                            "success": False, "error": '5000',
+                             "message": status_code['5000']}, status=500)
 
     @action(methods=['PUT'], detail=False, url_path='password/reset')
     def password_reset(self, request):  # 비밀번호 재설정, 비밀번호 찾기
@@ -191,29 +203,60 @@ class UsersViewSet(viewsets.ModelViewSet):
         email = request.POST.get('email', False)  # postman에서 입력한 값 5agrvd@gmail.com
         pwd = request.POST.get('pwd', False)
         db_email = Users.objects.get(email=email)
-        uid = db_email.uid
-        token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
-        server_token = Token.objects.get(token=token)
-        regex_pwd = re.compile(PWD_RGX)  # pwd validation
-        valid_pwd = regex_pwd.match(pwd)
-        if server_token:
-            if valid_pwd:
-                db_email.pwd = bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8")
-                db_email.save()
+        if db_email:
+            uid = db_email.uid
+            token = jwt.encode({'user': db_email.email}, SECRET_KEY, algorithm='HS256').decode('UTF-8')
+            server_token = Token.objects.get(token=token)
+            regex_pwd = re.compile(PWD_RGX)  # pwd validation
+            valid_pwd = regex_pwd.match(pwd)
+            if server_token:
+                if valid_pwd:
+                    db_email.pwd = bcrypt.hashpw(pwd.encode("UTF-8"), bcrypt.gensalt()).decode("UTF-8")
+                    db_email.save()
+                    return JsonResponse({"result": {"location": "/users/:"+uid, },
+                                        "success": True, "errors": [],
+                                         "message": status_code['202']}, status=202)
                 return JsonResponse({"result": {"location": "/users/:"+uid, },
-                                     "success": True, "errors": [],
-                                     "messages": status_code['202']}, status=202)
+                                    "success": False, "errors": '4000',
+                                     "message": status_code['4000'].format("pwd")}, status=400)
             return JsonResponse({"result": {"location": "/users/:"+uid, },
-                                "success": False, "errors": '4000',
-                                 "messages": status_code['4000']}, status=400)
-        return JsonResponse({"result": {"location": "/users/:"+uid, },
-                            "success": False, "errors": '4010',
-                             "messages": status_code['4010']}, status=401)
+                                "success": False, "errors": '4010',
+                                 "message": status_code['4010']}, status=401)
+        return JsonResponse({"result": {"location": "/users/" '[]', },
+                            "success": False, "errors": '5000',
+                             "message": status_code['5000']}, status=500)
+
+    @action(methods=['DELETE'], detail=False, url_path='delete')
+    def user_delete(self, request):
+        email = request.POST.get('email', False)  # r
+        pwd = request.POST.get('pwd', False)  # 11111
+        if email and pwd:
+            try:
+                db_email = Users.objects.get(email=email)
+                uid = db_email.uid  # db에 저장되어있는 값 -db에서5agrvd@gmail.com/uid
+                if bcrypt.checkpw(pwd.encode('UTF-8'), db_email.pwd.encode('UTF-8')):
+                    db_email.delete()
+                    return JsonResponse({"result": {"location": "delete completed."},
+                                         "success": True, "error": None,
+                                         "message": status_code['202']}, status=202)
+
+                return JsonResponse({"result": {"location": "users/:" + uid},
+                                     "success": False, "error": '4010',
+                                     "message": status_code['4010']}, status=401)
+            except:
+                return JsonResponse({"result": {"location": "users/login/"},
+                                     "success": False, "error": '5000',
+                                     "message": status_code['5000']}, status=500)
+
+        return JsonResponse({"result": {"location": "users/:"},
+                             "success": False, "error": '4004',
+                             "message": status_code['4004'].format("email, pwd")}, status=500)
 
     def create(self, request, *args, **kwargs):
         if request.method == 'POST':
             result = self.signup(request)
         return result
+
 
 
 class HospitalViewSet(viewsets.ModelViewSet):
@@ -226,6 +269,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
         """
         111. 진료거부 병원 등록
         """
+        #name = request.GET.get('name', False)
         name = request.POST.get('name', False)  # postman 에서 입력한 값
         tel = request.POST.get('tel', False)
         address = request.POST.get('address', False)
@@ -254,21 +298,22 @@ class HospitalViewSet(viewsets.ModelViewSet):
             if valid_name and valid_tel and valid_address and valid_status and valid_uid:
                 Hospitals.objects.create(name=name, tel=tel, address=address, status=op_status, x=coord_x,
                                          y=coord_y, uid=uid)
-                chk_data = Hospitals.objects.get(name=name)
+
+                chk_data = Hospitals.objects.get(name=name, tel=tel)
                 hospital_id = chk_data.id
                 return JsonResponse({"result": {"location": "/hospitals/:"+str(hospital_id)},
-                                     "success": 'true', "errors": [],
-                                     "messages": status_code['201']}, status=201)
+                                     "success": True, "errors": [],
+                                     "message": status_code['201']}, status=201)
                 # return Response("Status 4004 : 다시 입력해 주세요.", status=status.HTTP_400_BAD_REQUEST)
             return JsonResponse({"result": {"location": "/users/:"+uid},
-                                "success": True, "errors": '4000',
-                                 "messages": status_code['4000'].format("name,tel,address,status")}, status=400)
+                                "success": False, "errors": '4000',
+                                 "message": status_code['4000'].format("name,tel,address,status")}, status=400)
         return JsonResponse({"result": {"location": "/users/:"+uid},
-                            "success": True, "errors": '4004',
-                             "messages": status_code['4004'].format("name,tel,address,status")}, status=400)
+                            "success": False, "errors": '4004',
+                             "message": status_code['4004'].format("name,tel,address,status")}, status=400)
 
     @action(methods=['GET'], detail=False)
-    def excel(self,request):
+    def excel(self, request):
         """
         131. 전체 리스트 다운로드
         """
@@ -287,10 +332,12 @@ class HospitalViewSet(viewsets.ModelViewSet):
         finally:
             conn.close()
             work_book.close()
-        return Response("201 created", status=status.HTTP_201_CREATED)
+        return JsonResponse({"result": {"location": "/hospitals/excel/"},
+                            "success": 'true', "errors": [],
+                             "message": status_code['201']}, status=201)
 
     # 열린 병원 보기
-    @action(methods=['GET'], detail=False)
+    @action(methods=['GET'], detail=False, url_path='find')
     def nearby_hospital(self, request):  # 열린 병원 보기
         """
         121. 병원 검색
@@ -304,17 +351,14 @@ class HospitalViewSet(viewsets.ModelViewSet):
         if name:#or tel or address or op_status:  # tel and address and opstatus:
             # data = Hospitals.objects.create(name=name, tel=tel, address=address, status=opstatus)
             #hospitals = Hospitals.objects.filter(name=name)
-            data = Hospitals.objects.get(name=name)
-            tel = data.tel
-            address = data.address
-            op_status = data.status
 
-            return JsonResponse({"result": {"hospitals":'[]',
-                                 "name": name, "tel": tel, "address": address,
-                                "status": op_status},
-                                 "success": True, "error": [],"message": status_code['202']},status=202)
+            hospitals = self.gethospitals(Hospitals.objects.filter(name=name))
+
+            return JsonResponse({"result": {"hospitals": hospitals},
+                                 "success": True, "error": [], "message": status_code['202']}, status=202)
+
         return JsonResponse({"result": {"hospitals": '[]'},
-                             "success": False, "error": '40041',
+                             "success": False, "error": '4004',
                              "message": status_code['4004'].format("name, tel, address, status")}, status=400)
 
     @action(methods=['GET', 'PUT'], detail=False, url_path='hospitalid')
@@ -323,25 +367,27 @@ class HospitalViewSet(viewsets.ModelViewSet):
         123. 병원상세보기
         """
         if request.method == 'GET':
-            name = request.POST.get('name', False)  # postman에서 입력한 값
+            #name = request.POST.get('name', False)# postman 에서 입력한 값
+            name = request.GET.get('name', False)
+            tel = request.GET.get('tel', False)
+            address = request.GET.get('address', False)
+            op_status = request.GET.get('status', False)
 
-            if name:
-                data = Hospitals.objects.get(name=name)
-                tel = data.tel
-                address = data.address
-                op_status = data.status
-                hospital_id = data.id
-                geocode = URL + address
-                result = requests.get(urlparse(geocode).geturl(),
-                                      headers={"Authorization": "KakaoAK 230655e7cf44450d080665dc328e4dd2"})
-                json_obj = result.json()
-                coord_x = json_obj['documents'][0]['address']['x']
-                coord_y = json_obj['documents'][0]['address']['y']
+            if name or tel or address or op_status:
+                if name:
+                    hospitals = self.gethospitals(Hospitals.objects.filter(name=name))
+
+                elif tel:
+                    hospitals = self.gethospitals(Hospitals.objects.filter(tel=tel))
+                elif address:
+                    hospitals = self.gethospitals(Hospitals.objects.filter(address=address))
+                else:
+                    hospitals = self.gethospitals(Hospitals.objects.filter(status=op_status))
+
                 # data.loads()
-                return JsonResponse({"result": {"location": "/hospitals/:"+hospital_id,
-                                                "name": name, "tel": tel, "address": address, "status": op_status,
-                                                "x": coord_x, "y": coord_y,
-                                                }, "success": 'true', "errors": [], "messages": []}, status=201)
+                return JsonResponse({"result": {"hospitals": hospitals},
+                                     "success": True, "errors": [],
+                                     "message": status_code['201']}, status=201)
 
             return JsonResponse({"result": {"hospitals": '[]'},
                                  "success": False, "error": '4004',
@@ -358,11 +404,40 @@ class HospitalViewSet(viewsets.ModelViewSet):
                 hospital_obj.save()
                 return JsonResponse(
                     {"result": {"location": "/hospitals/:"+str(hospital_id)},
-                     "success": 'true', "errors": [], "messages": []},
+                     "success": True, "errors": [], "message": status_code['200']},
                     status=200)
         return JsonResponse({"result": {"hospitals": '[]'},
                              "success": False, "error": '4004',
                              "message": status_code['4004'].format("status")}, status=400)
+
+   # @action(methods=['DELETE'], detail=False, url_path='ho')
+    #def delete_hospital(self, request):
+    @action(methods=['DELETE'], detail=False, url_path='delete')
+    def hospital_delete(self, request):
+        name = request.POST.get('name', False)
+        tel = request.POST.get('tel', False)
+        if name and tel:
+            try:
+                db_name = Hospitals.objects.get(name=name, tel=tel)
+                if db_name:
+                    hospital_id = db_name.id  # db에 저장되어있는 값 -db에서5agrvd@gmail.com/uid
+                    db_name.delete()
+                    return JsonResponse({"result": {"hospital_id": str(hospital_id)+" delete completed."},
+                                        "success": True, "error": None,
+                                         "message": status_code['202']}, status=202)
+
+                return JsonResponse({"result": {"location": "no matching data"},
+                                     "success": False, "error": '5000',
+                                     "message": status_code['5000']}, status=500)
+            except:
+                return JsonResponse({"result": {"location": "no matching data1"},
+                                    "success": False, "error": '5000',
+                                     "message": status_code['5000']}, status=500)
+        else:
+            return JsonResponse({"result": {"location": "hospitals/delete/"},
+                                 "success": False, "error": '5000',
+                                 "message": status_code['5000']}, status=500)
+
 
     def create(self, request, *args, **kwargs):
         if request.method == 'POST':
@@ -371,7 +446,7 @@ class HospitalViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         if request.method == 'GET':
-            result = self.nearby_hospital(request)
+            result = self.hospital_id(request)
         return result
 
     def update(self, request, pk=None, *args, **kwargs):
@@ -379,13 +454,34 @@ class HospitalViewSet(viewsets.ModelViewSet):
             result = self.hospital_id(request)
         return result
 
+    def retrieve(self, request, *args, **kwargs):
+        result = self.nearby_hospital(request)
+        return result
+
+    def destroy(self, request, pk=None, *args, **kwargs):
+        result = self.hospital_delete(request)
+        return result
+
+    def gethospitals(self, hospitals):
+        """ Return hospital list in arr
+        """
+        hospitals = list(hospitals)
+        arr = []
+        for hospital in hospitals:
+            id = hospital.id
+            name = hospital.name
+            tel = hospital.tel
+            status = hospital.status
+            address = hospital.address
+            line = {"id": id, "name": name, "tel": tel, "status": status, "address": address}
+            arr.append(line)
+        return arr
 
 
 class HEViewSet(viewsets.ModelViewSet):
     queryset = Hospitaledithistories.objects.all()
     serializer_class = HESerializer
     permission_classes = [permissions.IsAuthenticated]
-
 
 
 class TokenViewSet(viewsets.ModelViewSet):
